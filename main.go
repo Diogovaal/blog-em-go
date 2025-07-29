@@ -13,7 +13,8 @@ func main() {
 
 	database.Connect()
 
-	database.DB.AutoMigrate(&models.User{})
+	database.DB.AutoMigrate(&models.Usuario{})
+	database.MigrarBanco()
 
 	r := gin.Default()
 	r.Use(middlewares.Logger())
