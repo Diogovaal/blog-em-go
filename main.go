@@ -14,7 +14,6 @@ func main() {
 	database.Connect()
 
 	database.DB.AutoMigrate(&models.Usuario{})
-	database.MigrarBanco()
 
 	r := gin.Default()
 	r.Use(middlewares.Logger())

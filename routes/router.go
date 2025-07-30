@@ -7,15 +7,10 @@ import (
 )
 
 func SetupRoutes(r *gin.Engine) {
-	usuarioRoutes := r.Group("/usuarios")
-	{
-		usuarioRoutes.POST("/", controllers.CriarUsuario)
-		usuarioRoutes.GET("/", controllers.ListarUsuarios)
-	}
 
-	postRoutes := r.Group("/posts")
-	{
-		postRoutes.POST("/", controllers.CriarPost)
-		postRoutes.GET("/", controllers.ListarPosts)
-	}
+	r.POST("/usuarios", controllers.CriarUsuario)
+	r.GET("/usuarios", controllers.ListarUsuarios)
+	r.GET("/usuarios/:id", controllers.BuscarUsuario)
+	r.PUT("/usuarios/:id", controllers.AtualizarUsuario)
+	r.DELETE("/usuarios/:id", controllers.DeletarUsuario)
 }
