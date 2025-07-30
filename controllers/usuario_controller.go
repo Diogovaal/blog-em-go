@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func CriarUsuario(c *gin.Context) {
@@ -16,10 +17,21 @@ func CriarUsuario(c *gin.Context) {
 		return
 	}
 
+	//criptografar a senha antes de salvar
+
+	senhaHash, err := bcrypt.GenerateFromPassword([]byte(usuario.Senha), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"erro": "erro ao criptografar a senha"})
+		return
+	}
+
+	usuario.Senha = string(senhaHash)
+
 	result := database.DB.Create(&usuario)
 
 	if result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "erro ao salvar no banco"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+		return
 
 	}
 
