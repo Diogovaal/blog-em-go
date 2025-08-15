@@ -8,7 +8,6 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/crypto/bcrypt"
 )
 
 //DTOs: estruturas para entrada/saída sem expor campos indevidos
@@ -37,9 +36,9 @@ func toUsuarioOut(u models.Usuario) UsuarioOut {
 }
 
 func CriarUsuario(c *gin.Context) {
-	var usuario models.Usuario
+	var in UsuarioInput
 
-	if err := c.ShouldBindJSON(&usuario); err != nil {
+	if err := c.ShouldBindJSON(&in); err != nil {
 		c.JSON(400, gin.H{"erro": err.Error()})
 		return
 	}
@@ -63,25 +62,6 @@ func CriarUsuario(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, toUsuarioOut(u))
 
-	//criptografar a senha antes de salvar
-
-	senhaHash, err := bcrypt.GenerateFromPassword([]byte(usuario.Senha), bcrypt.DefaultCost)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"erro": "erro ao criptografar a senha"})
-		return
-	}
-
-	usuario.Senha = string(senhaHash)
-
-	result := database.DB.Create(&usuario)
-
-	if result.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
-		return
-
-	}
-
-	c.JSON(http.StatusOK, usuario)
 }
 
 func ListarUsuarios(c *gin.Context) {
