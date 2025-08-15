@@ -3,11 +3,38 @@ package controllers
 import (
 	"blog-api/database"
 	"blog-api/models"
+	"blog-api/utils"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 )
+
+//DTOs: estruturas para entrada/saída sem expor campos indevidos
+
+type UsuarioInput struct {
+	Nome  string `json:"nome" binding:"required"`
+	Email string `json:"email" binding:"required,email"`
+	Senha string `json:"senha" binding:"required,min=6"`
+}
+
+type UsuarioUpdateInput struct {
+	Nome  *string `json:"nome,omitempty"`
+	Email *string `json:"email,omitempty"`
+	Senha *string `json:"senha,omitempty"`
+}
+
+type UsuarioOut struct {
+	ID    uint   `json:"id"`
+	Nome  string `json:"nome"`
+	Email string `json:"email"`
+}
+
+// Helper para “sanitizar” a saída (nunca expor senha)
+func toUsuarioOut(u models.Usuario) UsuarioOut {
+	return UsuarioOut{ID: u.ID, Nome: u.Nome, Email: u.Email}
+}
 
 func CriarUsuario(c *gin.Context) {
 	var usuario models.Usuario
@@ -16,6 +43,25 @@ func CriarUsuario(c *gin.Context) {
 		c.JSON(400, gin.H{"erro": err.Error()})
 		return
 	}
+
+	//gerar hash da senha antes de persistir
+	hash, err := utils.HashPassword(in.Senha)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"erro": "erro ao processar senha"})
+		return
+	}
+
+	u := models.Usuario{
+		Nome:  in.Nome,
+		Email: in.Email,
+		Senha: hash, //guarda só o hash
+	}
+	if err := database.DB.Create(&u).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"erro": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, toUsuarioOut(u))
 
 	//criptografar a senha antes de salvar
 
@@ -40,38 +86,67 @@ func CriarUsuario(c *gin.Context) {
 
 func ListarUsuarios(c *gin.Context) {
 	var usuarios []models.Usuario
-	database.DB.Find(&usuarios)
-	c.JSON(http.StatusOK, usuarios)
+	if err := database.DB.Find(&usuarios).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"erro": err.Error()})
+		return
+	}
+	out := make([]UsuarioOut, 0, len(usuarios))
+	for _, u := range usuarios {
+		out = append(out, toUsuarioOut(u))
+	}
+	c.JSON(http.StatusOK, out)
 }
 
 func BuscarUsuario(c *gin.Context) {
 	id := c.Param("id")
-	var usuario models.Usuario
+	var u models.Usuario
 
-	if result := database.DB.First(&usuario, id); result.Error != nil {
+	if result := database.DB.First(&u, id); result.Error != nil {
 		c.JSON(http.StatusNotFound, gin.H{"erro": "Usuário não encontrado"})
 		return
 	}
-	c.JSON(http.StatusOK, usuario)
+	c.JSON(http.StatusOK, toUsuarioOut(u))
 }
 
 func AtualizarUsuario(c *gin.Context) {
-	id := c.Param("id")
-	var usuario models.Usuario
+	idStr := c.Param("id")
+	id, _ := strconv.Atoi(idStr)
 
-	if result := database.DB.First(&usuario, id); result.Error != nil {
-		c.JSON(http.StatusOK, gin.H{"erro": "Usuario não encontrado"})
-		return
-	}
-
-	//Atualizar os campos recebidos no JSON
-	if err := c.ShouldBindJSON(&usuario); err != nil {
+	var in UsuarioUpdateInput
+	if err := c.ShouldBindJSON(&in); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"erro": err.Error()})
 		return
 	}
 
-	database.DB.Save(&usuario)
-	c.JSON(http.StatusOK, usuario)
+	var u models.Usuario
+
+	if err := database.DB.First(&u, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"erro": "Usuario não encontrado"})
+		return
+	}
+
+	//Atualizar os campos recebidos no JSON
+	if in.Nome != nil {
+		u.Nome = *in.Nome
+	}
+	if in.Email != nil {
+		u.Email = *in.Email
+	}
+
+	if in.Senha != nil && *in.Senha != "" {
+		hash, err := utils.HashPassword(*in.Senha)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"erro": "erro ao processar senha"})
+			return
+		}
+		u.Senha = hash
+	}
+
+	if err := database.DB.Save(&u).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"erro": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, toUsuarioOut(u))
 
 }
 
@@ -80,9 +155,9 @@ func AtualizarUsuario(c *gin.Context) {
 func DeletarUsuario(c *gin.Context) {
 	id := c.Param("id")
 
-	if result := database.DB.Delete(&models.Usuario{}, id); result.RowsAffected == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"erro": "Usuario não encontrado"})
+	if err := database.DB.Delete(&models.Usuario{}, id).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"erro": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"mensagem": "usuario deletado com sucesso"})
+	c.Status(http.StatusNoContent)
 }
