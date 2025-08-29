@@ -6,7 +6,6 @@ import (
 	"blog-api/utils"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -39,26 +38,58 @@ func Login(c *gin.Context) {
 		return
 	}
 	//criar token jwt
-	secret := os.Getenv("SECRET_JWT")
-	claims := jwt.MapClaims{
-		"sub":   u.ID,
-		"exp":   time.Now().Add(time.Hour * 24).Unix(),
-		"iat":   time.Now().Unix(),
-		"email": u.Email,
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
-	tokenString, err := token.SignedString([]byte(secret))
+	accessToken, err := utils.GenerateAcessToken(u.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"erro": "erro ao gerar token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"erro": "não foi possivel gerar o token"})
+		return
+	}
+	refreshToken, err := utils.GenerateRefreshToken(u.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"erro": "não foi possivel gerar o token"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"token": tokenString,
+		"access_token":  accessToken,
+		"refresh_token": refreshToken,
 	})
 }
 
-func Register(c *gin.Context) {
+func RefreshToken(c *gin.Context) {
+	var req struct {
+		RefreshToken string `json:"refresh_token" binding:"required"`
+	}
 
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Refresh token é obrigatório"})
+		return
+	}
+
+	//validar o refresh token
+	token, err := jwt.Parse(req.RefreshToken, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("SECRET_REFRESH")), nil
+	})
+
+	if err != nil || !token.Valid {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token inválido"})
+		return
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok || !token.Valid {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token inválido"})
+		return
+	}
+	userID := uint(claims["user_id"].(float64))
+
+	//gerar novos acess tokens
+	newAcessToken, err := utils.GenerateAcessToken(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Não foi possível gerar o token de acesso"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"access_token": newAcessToken,
+	})
 }

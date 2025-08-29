@@ -12,6 +12,7 @@ func SetupRoutes(r *gin.Engine) {
 	//publico
 	r.POST("/usuarios", controllers.CriarUsuario)
 	r.POST("/login", controllers.Login)
+	r.POST("/refresh", controllers.RefreshToken)
 
 	//crud
 
